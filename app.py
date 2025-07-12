@@ -67,6 +67,7 @@ async def websocket_handler():
                                 high = float(pair['h'])
                                 low = float(pair['l'])
                                 change = float(pair['P'])
+                                volume = float(pair['v'])  # 24h volume
                                 
                                 if low > 0:
                                     # Calculate LD: % difference from current to low
@@ -80,7 +81,8 @@ async def websocket_handler():
                                         'Symbol': symbol,
                                         'LD': round(ld, 2),
                                         'HD': round(hd, 2),
-                                        '% Profit': round(profit_margin, 2)
+                                        '% Profit': round(profit_margin, 2),
+                                        'Vol': round(volume, 0)
                                     })
                             except (ValueError, KeyError):
                                 continue
