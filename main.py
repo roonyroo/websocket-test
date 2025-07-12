@@ -7,9 +7,9 @@ import threading
 
 # Page config
 st.set_page_config(
-    page_title="WebSocket Test",
-    page_icon="🔗",
-    layout="wide"
+    page_title=\"WebSocket Test\",
+    page_icon=\"🔗\",
+    layout=\"wide\"
 )
 
 # Initialize session state
@@ -19,52 +19,75 @@ if 'test_running' not in st.session_state:
     st.session_state.test_running = False
 if 'test_log' not in st.session_state:
     st.session_state.test_log = []
+if 'usdt_pairs' not in st.session_state:
+    st.session_state.usdt_pairs = []
 
 def add_log(message):
-    """Add log message with timestamp"""
+    \"\"\"Add log message with timestamp\"\"\"
     timestamp = datetime.now().strftime('%H:%M:%S')
-    st.session_state.test_log.append(f"[{timestamp}] {message}")
+    st.session_state.test_log.append(f\"[{timestamp}] {message}\")
 
 async def test_websocket():
-    """Test WebSocket connection"""
-    uri = "wss://stream.binance.com:9443/ws/!ticker@arr"
+    \"\"\"Test WebSocket connection with real data\"\"\"
+    uri = \"wss://stream.binance.com:9443/ws/!ticker@arr\"
     
-    add_log("Starting WebSocket test...")
-    add_log(f"Connecting to: {uri}")
+    add_log(\"Starting WebSocket test...\")
+    add_log(f\"Connecting to: {uri}\")
     
     try:
         async with websockets.connect(uri, ping_interval=20) as websocket:
-            add_log("✅ Connected successfully!")
+            add_log(\"✅ Connected successfully!\")
             
             # Receive one message to test
             message = await asyncio.wait_for(websocket.recv(), timeout=10)
             data = json.loads(message)
             
             if isinstance(data, list):
-                usdt_count = sum(1 for item in data if item.get('s', '').endswith('USDT'))
-                add_log(f"📊 Received {usdt_count} USDT pairs")
+                # Filter USDT pairs
+                usdt_data = [item for item in data if item.get('s', '').endswith('USDT')]
+                usdt_count = len(usdt_data)
+                add_log(f\"📊 Received {usdt_count} USDT pairs\")
                 
-                # Show first few USDT pairs
-                usdt_pairs = [item for item in data if item.get('s', '').endswith('USDT')][:5]
-                for pair in usdt_pairs:
+                # Get last 10 USDT pairs with real data
+                last_10_usdt = usdt_data[-10:]
+                st.session_state.usdt_pairs = []
+                
+                for pair in last_10_usdt:
                     symbol = pair['s']
-                    price = pair['c']
-                    add_log(f"  {symbol}: {price}")
+                    current = float(pair['c'])
+                    high = float(pair['h'])
+                    low = float(pair['l'])
+                    change = float(pair['P'])
+                    
+                    # Calculate profit margin
+                    profit_margin = ((high - low) / low) * 100 if low > 0 else 0
+                    
+                    st.session_state.usdt_pairs.append({
+                        'Symbol': symbol,
+                        'Current': current,
+                        'High': high,
+                        'Low': low,
+                        'Change %': change,
+                        'Profit Margin %': round(profit_margin, 2)
+                    })
+                
+                add_log(f\"📈 Captured last 10 USDT pairs with live data\")
             
-            add_log("✅ Test completed successfully!")
+            add_log(\"✅ Test completed successfully!\")
             return True
             
     except asyncio.TimeoutError:
-        add_log("❌ Connection timeout")
+        add_log(\"❌ Connection timeout\")
         return False
     except Exception as e:
-        add_log(f"❌ Error: {str(e)}")
+        add_log(f\"❌ Error: {str(e)}\")
         return False
 
 def run_test():
-    """Run the WebSocket test"""
+    \"\"\"Run the WebSocket test\"\"\"
     st.session_state.test_running = True
     st.session_state.test_log = []
+    st.session_state.usdt_pairs = []
     
     def test_thread():
         loop = asyncio.new_event_loop()
@@ -80,26 +103,37 @@ def run_test():
     thread.start()
 
 # Main UI
-st.title("WebSocket Connection Test")
-st.markdown("**Testing Binance WebSocket Stream**")
+st.title(\"WebSocket Connection Test\")
+st.markdown(\"**Testing Binance WebSocket Stream**\")
 
 # Test button
-if st.button("Run WebSocket Test", type="primary", disabled=st.session_state.test_running):
+if st.button(\"Run WebSocket Test\", type=\"primary\", disabled=st.session_state.test_running):
     run_test()
 
 # Status
 if st.session_state.test_running:
-    st.info("🔄 Test running...")
+    st.info(\"🔄 Test running...\")
     st.rerun()
 elif st.session_state.test_result is not None:
     if st.session_state.test_result:
-        st.success("✅ WebSocket test PASSED")
+        st.success(\"✅ WebSocket test PASSED\")
     else:
-        st.error("❌ WebSocket test FAILED")
+        st.error(\"❌ WebSocket test FAILED\")
+
+# Real USDT data table
+if st.session_state.usdt_pairs:
+    st.subheader(\"Last 10 USDT Pairs (Live Data)\")
+    
+    # Create table
+    import pandas as pd
+    df = pd.DataFrame(st.session_state.usdt_pairs)
+    st.dataframe(df, use_container_width=True)
+    
+    st.info(f\"Showing {len(st.session_state.usdt_pairs)} pairs with real-time data\")
 
 # Test log
 if st.session_state.test_log:
-    st.subheader("Test Log")
+    st.subheader(\"Test Log\")
     for log_entry in st.session_state.test_log:
         st.text(log_entry)
 
@@ -109,5 +143,5 @@ if st.session_state.test_running:
     time.sleep(1)
     st.rerun()
 
-st.markdown("---")
-st.markdown("*Simple WebSocket connectivity test*")
+st.markdown(\"---\")
+st.markdown(\"*WebSocket test with real USDT data*\")
