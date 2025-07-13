@@ -8,12 +8,12 @@ import pandas as pd
 
 # Page config
 st.set_page_config(
-    page_title=\"WebSocket Test\",
-    page_icon=\"🔗\",
+    page_title=\"Binance USDT Tracker\",
+    page_icon=\"📊\",
     layout=\"wide\"
 )
 
-# Initialize session state with connection management
+# Initialize session state
 if 'ws_connected' not in st.session_state:
     st.session_state.ws_connected = False
 if 'ws_data' not in st.session_state:
@@ -31,24 +31,22 @@ def add_log(message):
     if 'ws_logs' not in st.session_state:
         st.session_state.ws_logs = []
     st.session_state.ws_logs.append(f\"[{timestamp}] {message}\")
-    # Keep only last 20 logs
     if len(st.session_state.ws_logs) > 20:
         st.session_state.ws_logs = st.session_state.ws_logs[-20:]
 
 async def websocket_handler():
-    \"\"\"Handle WebSocket connection with proper cleanup\"\"\"
+    \"\"\"Handle WebSocket connection\"\"\"
     uri = \"wss://stream.binance.com:9443/ws/!ticker@arr\"
     
     try:
-        add_log(\"Attempting WebSocket connection...\")
+        add_log(\"Connecting to Binance WebSocket...\")
         st.session_state.ws_status = \"Connecting\"
         
         async with websockets.connect(uri, ping_interval=20, ping_timeout=10) as websocket:
-            add_log(\"✅ Connected to Binance WebSocket\")
+            add_log(\"Connected successfully!\")
             st.session_state.ws_connected = True
             st.session_state.ws_status = \"Connected\"
             
-            # Listen for messages until stop signal
             while not st.session_state.stop_websocket:
                 try:
                     message = await asyncio.wait_for(websocket.recv(), timeout=1.0)
@@ -58,54 +56,49 @@ async def websocket_handler():
                         # Filter USDT pairs
                         usdt_data = [item for item in data if item.get('s', '').endswith('USDT')]
                         
-                        # Process top 10 USDT pairs
+                        # Process data with volume
                         processed_data = []
-                        for pair in usdt_data[:10]:
+                        for pair in usdt_data[:15]:  # Show more pairs
                             try:
                                 symbol = pair['s']
                                 current = float(pair['c'])
                                 high = float(pair['h'])
                                 low = float(pair['l'])
-                                change = float(pair['P'])
                                 volume = float(pair['v'])  # 24h volume
                                 
                                 if low > 0:
-                                    # Calculate LD: % difference from current to low
+                                    # Calculate metrics
                                     ld = ((current - low) / low) * 100
-                                    # Calculate HD: % difference from current to high  
                                     hd = ((current - high) / high) * 100
-                                    # Calculate Profit margin: (high - low) / low * 100
                                     profit_margin = ((high - low) / low) * 100
                                     
                                     processed_data.append({
                                         'Symbol': symbol,
-                                        'LD': round(ld, 2),
-                                        'HD': round(hd, 2),
-                                        '% Profit': round(profit_margin, 2),
-                                        'Vol': round(volume, 0)
+                                        'LD': f\"{ld:.2f}%\",
+                                        'HD': f\"{hd:.2f}%\",
+                                        '% Profit': f\"{profit_margin:.2f}%\",
+                                        'Vol': f\"{volume:,.0f}\"
                                     })
                             except (ValueError, KeyError):
                                 continue
                         
                         st.session_state.ws_data = processed_data
-                        add_log(f\"📊 Updated {len(processed_data)} USDT pairs\")
+                        add_log(f\"Updated {len(processed_data)} USDT pairs with volume data\")
                         
                 except asyncio.TimeoutError:
-                    # Timeout is expected for stop signal checking
                     continue
                 except websockets.exceptions.ConnectionClosed:
-                    add_log(\"❌ WebSocket connection closed\")
+                    add_log(\"Connection closed\")
                     break
                     
     except Exception as e:
-        add_log(f\"❌ WebSocket error: {str(e)}\")
+        add_log(f\"Error: {str(e)}\")
     finally:
         st.session_state.ws_connected = False
         st.session_state.ws_status = \"Disconnected\"
-        add_log(\"WebSocket connection closed\")
 
 def start_websocket():
-    \"\"\"Start WebSocket in separate thread\"\"\"
+    \"\"\"Start WebSocket connection\"\"\"
     if not st.session_state.ws_connected and (st.session_state.ws_thread is None or not st.session_state.ws_thread.is_alive()):
         st.session_state.stop_websocket = False
         
@@ -119,28 +112,26 @@ def start_websocket():
         
         st.session_state.ws_thread = threading.Thread(target=websocket_thread, daemon=True)
         st.session_state.ws_thread.start()
-        add_log(\"🚀 Starting WebSocket connection...\")
 
 def stop_websocket():
     \"\"\"Stop WebSocket connection\"\"\"
     st.session_state.stop_websocket = True
     st.session_state.ws_connected = False
     st.session_state.ws_status = \"Disconnected\"
-    add_log(\"🛑 Stopping WebSocket connection...\")
 
 # Main UI
-st.title(\"Binance USDT WebSocket Test\")
-st.markdown(\"**Real-time USDT pair analysis with WebSocket connection**\")
+st.title(\"Binance USDT Tracker\")
+st.markdown(\"Real-time USDT pair analysis\")
 
-# Connection controls
+# Controls
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
-    if st.button(\"🚀 Start\", disabled=st.session_state.ws_connected):
+    if st.button(\"Start\", disabled=st.session_state.ws_connected):
         start_websocket()
 
 with col2:
-    if st.button(\"🛑 Stop\", disabled=not st.session_state.ws_connected):
+    if st.button(\"Stop\", disabled=not st.session_state.ws_connected):
         stop_websocket()
 
 with col3:
@@ -151,24 +142,20 @@ with col3:
     else:
         st.info(f\"Status: {st.session_state.ws_status}\")
 
-# Data display
+# Data display with volume
 if st.session_state.ws_data:
-    st.subheader(\"Live USDT Pairs\")
+    st.subheader(\"Live USDT Pairs (with Volume)\")
     df = pd.DataFrame(st.session_state.ws_data)
     st.dataframe(df, use_container_width=True)
     
-    # Show summary
-    st.info(f\"Showing {len(st.session_state.ws_data)} pairs with real-time data\")
+    st.info(f\"Displaying {len(st.session_state.ws_data)} pairs - Volume column included\")
 
-# Logs display
+# Connection logs
 if 'ws_logs' in st.session_state and st.session_state.ws_logs:
-    st.subheader(\"Connection Log\")
-    for log_entry in st.session_state.ws_logs[-10:]:  # Show last 10 logs
-        st.text(log_entry)
+    with st.expander(\"Connection Log\"):
+        for log_entry in st.session_state.ws_logs[-8:]:
+            st.text(log_entry)
 
-# Auto-refresh for live updates
+# Auto-refresh
 if st.session_state.ws_connected:
     st.rerun()
-
-st.markdown(\"---\")
-st.markdown(\"*WebSocket test with connection management*\")
